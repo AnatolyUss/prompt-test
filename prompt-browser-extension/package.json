@@ -1,0 +1,47 @@
+{
+  "name": "prompt-browser-extension",
+  "version": "0.1.0",
+  "description": "prompt-browser-extension",
+  "author": "Anatoly Khaytovich <anatolyuss@gmail.com>",
+  "license": "MIT",
+  "main": "index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnatolyUss/prompt-test.git"
+  },
+  "scripts": {
+    "build": "webpack --config webpack.config.js --mode production",
+    "build-dev": "webpack --config webpack.config.js --mode production --watch",
+    "format": "prettier . --ignore-path ./.prettierignore --write && git status",
+    "lint": "eslint .",
+    "bd": "npm run build-dev",
+    "fb": "npm run format && npm run build",
+    "flb": "npm run format && npm run lint && npm run build"
+  },
+  "dependencies": {
+    "reflect-metadata": "0.2.2",
+    "class-validator": "0.14.1",
+    "class-transformer": "0.5.1",
+    "jquery": "3.7.1"
+  },
+  "devDependencies": {
+    "@babel/core": "7.24.9",
+    "@babel/preset-env": "7.24.8",
+    "@babel/preset-typescript": "7.24.7",
+    "eslint": "8.57.0",
+    "prettier": "3.3.3",
+    "@types/chrome": "0.0.277",
+    "@types/jquery": "3.5.31",
+    "browser-sync-webpack-plugin": "2.3.0",
+    "copy-webpack-plugin": "12.0.2",
+    "@typescript-eslint/eslint-plugin": "8.0.1",
+    "@typescript-eslint/parser": "8.0.1",
+    "eslint-config-prettier": "9.1.0",
+    "eslint-plugin-prettier": "5.2.1",
+    "source-map-support": "0.5.21",
+    "ts-loader": "9.5.1",
+    "webpack": "5.95.0",
+    "webpack-cli": "5.1.4",
+    "typescript": "5.6.3"
+  }
+}

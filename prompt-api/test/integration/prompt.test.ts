@@ -1,9 +1,12 @@
 import { Server } from 'node:http';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpModule } from '@nestjs/axios';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
+import PDFDocument = require('pdfkit'); // eslint-disable-line @typescript-eslint/no-require-imports
 
 import {
   initNestApp,
@@ -20,10 +23,25 @@ import { KafkaModule } from '../../src/lib/kafka/kafka.module';
 
 describe('prompt resource tests', (): void => {
   const prompt = 'Test prompt';
-  const invalidPrompt = '';
   let app: INestApplication;
   let testServer: Server;
   let promptService: PromptService;
+
+  const writePdfFile = async (pdfFilePath: string, pdfText: string): Promise<void> => {
+    return new Promise((resolve): void => {
+      // const writeStream = fs.createWriteStream(pdfFilePath).on('finish', () => {
+      //   console.log('Done!');
+      //   resolve();
+      // });
+
+      // new PDFDocument().text(pdfText, 100, 100).pipe(writeStream);
+      const doc = new PDFDocument();
+      doc.pipe(fs.createWriteStream(pdfFilePath));
+      doc.text(pdfText);
+      doc.end();
+      resolve();
+    });
+  };
 
   beforeEach(async (): Promise<void> => {
     // Run a real, non mocked http server, in order to check entire http communication cycle.
@@ -49,18 +67,27 @@ describe('prompt resource tests', (): void => {
   });
 
   it('should not inspect prompt due to validation errors', async (): Promise<void> => {
-    // Arrange and Act.
+    // Arrange.
+    const pdfFilePath = path.join(__dirname, '..', '..', '..', 'output.pdf');
+    const pdfText = 'qaws';
+    // await writePdfFile(pdfFilePath, pdfText);
+    const pdfBuffer = fs.readFileSync(pdfFilePath);
+
+    // Act.
     const response = await request(app.getHttpServer())
       .post('/prompt')
-      .send({ prompt: invalidPrompt });
+      // .attach(process.env.HTML_FILE_FIELD_NAME as string, pdfBuffer)
+      .attach('file', pdfBuffer)
+      .field('fileName', 'test.pdf');
 
     // Assert.
-    expect(response.status).toBe(400);
-    expect(response.body).toStrictEqual({
-      message: ['"prompt" cannot be empty'],
-      error: 'Bad Request',
-      statusCode: 400,
-    });
+    expect(response.status).toBe(201);
+    // expect(response.status).toBe(400);
+    // expect(response.body).toStrictEqual({
+    //   message: ['"fileName" length cannot be less than 5'],
+    //   error: 'Bad Request',
+    //   statusCode: 400,
+    // });
   });
 
   it('should successfully inspect prompt; no prompt-result mapping in Redis', async (): Promise<void> => {

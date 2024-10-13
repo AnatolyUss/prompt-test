@@ -5,11 +5,13 @@ import { HttpService } from '@nestjs/axios';
 import { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { Observable, catchError, firstValueFrom } from 'rxjs';
 import { retry } from 'rxjs/operators';
+import { Express } from 'express';
+import PdfParse = require('pdf-parse'); // eslint-disable-line @typescript-eslint/no-require-imports
 import { Producer, Consumer } from 'kafkajs';
 
-import { CreatePromptDto } from './dto/create-prompt.dto';
 import { CreatePromptResponseDto } from './dto/create-prompt-response.dto';
 import { PromptResponseMappingDto } from './dto/prompt-response-mapping.dto';
+import { CreatePromptDto } from './dto/create-prompt.dto';
 
 @Injectable()
 export class PromptService {
@@ -24,13 +26,15 @@ export class PromptService {
   /**
    * TODO: add comment/docs to each method.
    */
-  async inspectPrompt(dto: CreatePromptDto): Promise<CreatePromptResponseDto> {
+  async inspectPrompt(
+    dto: CreatePromptDto,
+    data: Express.Multer.File,
+  ): Promise<CreatePromptResponseDto> {
+    let promptHash: string = '';
+
     try {
-      // !!!Note, the ValidationPipe automatically transform payloads to be objects,
-      // typed according to their DTO classes.
-      // Meaning, that input validation is performed automatically, "under the hood".
-      // Hence, no need to add any validation logic neither at the service nor at the controller.
-      const promptHash: string = this.getPromptHash(dto.prompt);
+      const prompt: PdfParse.Result = await PdfParse(data.buffer);
+      promptHash = this.getPromptHash(prompt.text);
       const promptResponseFromRedis: CreatePromptResponseDto | null =
         await this.getPromptResponseFromRedis(promptHash);
 
@@ -40,7 +44,7 @@ export class PromptService {
         return promptResponseFromRedis;
       }
 
-      const responseDto: CreatePromptResponseDto = await this.queryApiProtect(dto);
+      const responseDto: CreatePromptResponseDto = await this.queryApiProtect(prompt.text);
 
       // Notify "prompt-background" service to store a new prompt-result mapping.
       await this.kafkaProducer.connect();
@@ -48,6 +52,7 @@ export class PromptService {
         topic: this.kafkaTopic,
         messages: [
           {
+            // TODO: check stuff!
             // partition: 0,
             // key: `key-${Math.random() * (10 - 1) + 1}`,
             value: JSON.stringify(new PromptResponseMappingDto(promptHash, responseDto)),
@@ -58,7 +63,8 @@ export class PromptService {
       return responseDto;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
-      Logger.fatal(`${this.inspectPrompt.name} failed to validate prompt: ${dto.prompt}`);
+      const msg = `${this.inspectPrompt.name} failed to inspect prompt: "${promptHash}", error: ${error}`;
+      Logger.fatal(msg);
       throw new InternalServerErrorException(); // Return status 500 to the client.
     }
   }
@@ -79,8 +85,8 @@ export class PromptService {
     await this.redisDataSource.set(promptHash, JSON.stringify(promptResponse)); // Note, no TTL on purpose.
   }
 
-  async queryApiProtect(dto: CreatePromptDto): Promise<CreatePromptResponseDto> {
-    const config: AxiosRequestConfig = this.getAxiosRequestConfig(dto);
+  async queryApiProtect(promptText: string): Promise<CreatePromptResponseDto> {
+    const config: AxiosRequestConfig = this.getAxiosRequestConfig(promptText);
 
     const observableSource: Observable<AxiosResponse<Partial<CreatePromptResponseDto>>> =
       this.httpService.request<Partial<CreatePromptResponseDto>>(config).pipe(
@@ -95,13 +101,13 @@ export class PromptService {
     return new CreatePromptResponseDto(data);
   }
 
-  private getAxiosRequestConfig(dto: CreatePromptDto): AxiosRequestConfig {
+  private getAxiosRequestConfig(promptText: string): AxiosRequestConfig {
     const method = process.env.PROMPT_API_PROTECT_METHOD;
     const baseUrl = process.env.PROMPT_API_BASE_URL;
     const port = process.env.PROMPT_API_PORT;
     const endpoint = process.env.PROMPT_API_PROTECT;
     const url = `${baseUrl}:${port}${endpoint}`;
     const headers = { 'Content-Type': 'application/json', 'APP-ID': process.env.PROMPT_APP_ID };
-    return { url, method, headers, data: { prompt: dto.prompt } };
+    return { url, method, headers, data: { prompt: promptText } };
   }
 }

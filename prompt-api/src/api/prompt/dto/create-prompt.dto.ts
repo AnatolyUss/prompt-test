@@ -5,12 +5,12 @@ import { IsDefined, IsString, MinLength, MaxLength } from 'class-validator';
 export class CreatePromptDto {
   @ApiProperty({
     required: true,
-    description: 'Prompt is a text to inspect',
+    description: 'Prompt file name',
   })
   @Expose()
-  @IsDefined({ message: '"prompt" is missing' })
-  @IsString({ message: '"prompt" must be a string' })
-  @MinLength(1, { message: '"prompt" cannot be empty' })
-  @MaxLength(8_000_000, { message: '"prompt" maximum length, as per ChatGPT, is 2M tokens, which is roughly 2M * 4 characters' })
-  prompt: string;
+  @IsDefined({ message: '"fileName" is missing' })
+  @IsString({ message: '"fileName" must be a string' })
+  @MinLength(5, { message: '"fileName" length cannot be less than 5' })
+  @MaxLength(1_000, { message: '"fileName" length cannot be more than 1000' })
+  fileName: string;
 }

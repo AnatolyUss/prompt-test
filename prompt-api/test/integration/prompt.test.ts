@@ -27,17 +27,12 @@ describe('prompt resource tests', (): void => {
   let testServer: Server;
   let promptService: PromptService;
 
-  const writePdfFile = async (pdfFilePath: string, pdfText: string): Promise<void> => {
+  const writePdfFile = (pdfFilePath: string, pdfText: string): Promise<void> => {
     return new Promise((resolve): void => {
-      // const writeStream = fs.createWriteStream(pdfFilePath).on('finish', () => {
-      //   console.log('Done!');
-      //   resolve();
-      // });
-
-      // new PDFDocument().text(pdfText, 100, 100).pipe(writeStream);
       const doc = new PDFDocument();
       doc.pipe(fs.createWriteStream(pdfFilePath));
-      doc.text(pdfText);
+      doc.fontSize(25);
+      doc.text(pdfText, 100, 100);
       doc.end();
       resolve();
     });
@@ -68,7 +63,7 @@ describe('prompt resource tests', (): void => {
 
   it('should not inspect prompt due to validation errors', async (): Promise<void> => {
     // Arrange.
-    const pdfFilePath = path.join(__dirname, '..', '..', '..', 'output.pdf');
+    const pdfFilePath = path.join(__dirname, '..', '..', '..', 'test-doc.pdf');
     const pdfText = 'qaws';
     // await writePdfFile(pdfFilePath, pdfText);
     const pdfBuffer = fs.readFileSync(pdfFilePath);
@@ -76,8 +71,8 @@ describe('prompt resource tests', (): void => {
     // Act.
     const response = await request(app.getHttpServer())
       .post('/prompt')
-      // .attach(process.env.HTML_FILE_FIELD_NAME as string, pdfBuffer)
-      .attach('file', pdfBuffer)
+      .attach(process.env.HTML_FILE_FIELD_NAME as string, pdfFilePath)
+      // .attach('file', pdfFilePath)
       .field('fileName', 'test.pdf');
 
     // Assert.

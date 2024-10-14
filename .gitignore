@@ -132,3 +132,4 @@ dist
 # Misc
 assets/examples/sample-requests.txt
 assets/.DS_Store
+.DS_Store

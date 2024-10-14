@@ -5,9 +5,8 @@ import { HttpService } from '@nestjs/axios';
 import { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { Observable, catchError, firstValueFrom } from 'rxjs';
 import { retry } from 'rxjs/operators';
-import { Express } from 'express';
 import PdfParse = require('pdf-parse'); // eslint-disable-line @typescript-eslint/no-require-imports
-import { Producer, Consumer } from 'kafkajs';
+import { Producer, ProducerRecord } from 'kafkajs';
 
 import { CreatePromptResponseDto } from './dto/create-prompt-response.dto';
 import { PromptResponseMappingDto } from './dto/prompt-response-mapping.dto';
@@ -17,15 +16,11 @@ import { CreatePromptDto } from './dto/create-prompt.dto';
 export class PromptService {
   constructor(
     @Inject('KAFKA_PRODUCER') readonly kafkaProducer: Producer,
-    @Inject('KAFKA_CONSUMER') readonly kafkaConsumer: Consumer, // Used during testing.
     @Inject('KAFKA_TOPIC') readonly kafkaTopic: string,
     @Inject('REDIS_CLIENT') readonly redisDataSource: any, // No TS declarations found.
     readonly httpService: HttpService,
   ) {}
 
-  /**
-   * TODO: add comment/docs to each method.
-   */
   async inspectPrompt(
     dto: CreatePromptDto,
     data: Express.Multer.File,
@@ -48,18 +43,20 @@ export class PromptService {
 
       // Notify "prompt-background" service to store a new prompt-result mapping.
       await this.kafkaProducer.connect();
-      await this.kafkaProducer.send({
+      const record: ProducerRecord = {
         topic: this.kafkaTopic,
         messages: [
           {
-            // TODO: check stuff!
-            // partition: 0,
-            // key: `key-${Math.random() * (10 - 1) + 1}`,
-            value: JSON.stringify(new PromptResponseMappingDto(promptHash, responseDto)),
+            partition: 0,
+            key: `key-${Math.ceil(Math.random() * (10 - 1)) + 1}`,
+            value: JSON.stringify(
+              new PromptResponseMappingDto(promptHash, responseDto, dto.fileName),
+            ),
           },
         ],
-      });
+      };
 
+      await this.kafkaProducer.send(record);
       return responseDto;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {

@@ -1,9 +1,7 @@
-export class PromptResponseMappingDto {
-  hash: string;
-  promptResponse: Record<string, any>;
+import { CreatePromptResponseDto } from './create-prompt-response.dto';
 
-  constructor(hash: string, promptResponse: Record<string, any>) {
-    this.hash = hash;
-    this.promptResponse = promptResponse;
+export class PromptResponseMappingDto {
+  constructor(promptHash: string, promptResponse: CreatePromptResponseDto, fileName: string) {
+    Object.assign(this, Object.assign(structuredClone(promptResponse), { promptHash, fileName }));
   }
 }

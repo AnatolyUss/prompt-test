@@ -2,6 +2,8 @@ import 'dotenv/config';
 import { Module, Global, Logger } from '@nestjs/common';
 import { createClient } from 'redis';
 
+import { RedisService } from './redis.service';
+
 export type RedisOptions = { url: string };
 
 export const getRedisOptions = (): RedisOptions => {
@@ -34,10 +36,16 @@ export const disconnectRedisClient = async (client: any): Promise<void> => {
 @Module({
   providers: [
     {
+      provide: 'REDIS_OPTIONS',
+      useValue: getRedisOptions(),
+    },
+    {
+      inject: ['REDIS_OPTIONS'],
       provide: 'REDIS_CLIENT',
       useFactory: getRedisClient,
     },
+    RedisService,
   ],
-  exports: ['REDIS_CLIENT'],
+  exports: ['REDIS_CLIENT', RedisService],
 })
 export class RedisModule {}

@@ -3,12 +3,12 @@ import helmet from 'helmet';
 import { Module, INestApplication, ValidationPipe } from '@nestjs/common';
 
 import { RedisModule } from './lib/redis/redis.module';
-import { KafkaModule } from './lib/kafka/kafka.module';
+import { SqsModule } from './lib/sqs/sqs.module';
 import { HealthcheckModule } from './api/healthcheck/healthcheck.module';
 import { PromptModule } from './api/prompt/prompt.module';
 
 @Module({
-  imports: [RedisModule, KafkaModule, HealthcheckModule, PromptModule],
+  imports: [RedisModule, SqsModule, HealthcheckModule, PromptModule],
 })
 export class AppModule {}
 

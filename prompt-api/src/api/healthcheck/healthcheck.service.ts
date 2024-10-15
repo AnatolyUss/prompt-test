@@ -1,26 +1,29 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 
 import { Probe } from './type/probe.enum';
+import { SqsService } from '../../lib/sqs/sqs.service';
+import { RedisService } from '../../lib/redis/redis.service';
 
 @Injectable()
 export class HealthcheckService {
-  constructor(@Inject('REDIS_CLIENT') readonly redisDataSource: any) {}
+  constructor(
+    readonly redisService: RedisService,
+    readonly sqsService: SqsService,
+  ) {}
 
   async isAliveAndReady(id: Probe): Promise<boolean> {
     if (id === Probe.LIVENESS) {
       return true;
     }
 
-    const [promptApi, redis, kafka] = await Promise.allSettled([
+    const [promptApi, redis, sqs] = await Promise.allSettled([
       this.isPromptApiConnected(),
       this.isRedisConnected(),
-      this.isKafkaConnected(),
+      this.isSqsConnected(),
     ]);
 
     return (
-      promptApi.status === 'fulfilled' &&
-      redis.status === 'fulfilled' &&
-      kafka.status === 'fulfilled'
+      promptApi.status === 'fulfilled' && redis.status === 'fulfilled' && sqs.status === 'fulfilled'
     );
   }
 
@@ -30,17 +33,19 @@ export class HealthcheckService {
     return true;
   }
 
-  isKafkaConnected(): boolean {
-    // As described at https://github.com/tulios/kafkajs/issues/1296, kafkajs does not introduce any
-    // reliable method, serving as a healthcheck.
-    // Hence, returning true.
-    return true;
+  async isSqsConnected(): Promise<boolean> {
+    try {
+      const queues: string[] = await this.sqsService.listQueues();
+      return queues.length !== 0;
+    } catch (error) {
+      Logger.error(`${this.isSqsConnected.name} error: ${JSON.stringify(error)}`);
+      throw error;
+    }
   }
 
   async isRedisConnected(): Promise<boolean> {
     try {
-      await this.redisDataSource.ping();
-      return true;
+      return await this.redisService.isRedisConnected();
     } catch (error) {
       Logger.error(`${this.isRedisConnected.name} error: ${JSON.stringify(error)}`);
       throw error;

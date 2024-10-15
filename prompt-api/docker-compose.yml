@@ -1,6 +1,28 @@
-# To run:
-# /usr/local/bin/docker compose -f /path/to/prompt-test/prompt-api/docker-compose.yml -p prompt-api up -d
+# Create local environment:
+# { /usr/local/bin/ }docker compose -f { /path/to }/prompt-test/prompt-api/docker-compose.yml -p prompt-api up -d
+#
+# Run in case you would like to test functionality using any sort of client app, Swagger UI or Postman.
+# Otherwise, no need to run these commands.
+# docker exec -it { localstack CONTAINERID } /bin/bash
+# awslocal sqs create-queue --queue-name prompt_results_to_store
+# awslocal sqs create-queue --queue-name prompt_results_to_delete
+version: '3.8'
 services:
+  localstack:
+    image: localstack/localstack:3.8.1
+    container_name: prompt-api-localstack
+    restart: unless-stopped
+    ports:
+      - ${LOCALSTACK_PORTS_1}:${LOCALSTACK_PORTS_1}
+      - ${LOCALSTACK_PORTS_2}:${LOCALSTACK_PORTS_2}
+    environment:
+      - SERVICES=${LOCALSTACK_ENV_SERVICES}
+      - DEBUG=${LOCALSTACK_ENV_DEBUG}
+      - DATA_DIR=${LOCALSTACK_ENV_DATA_DIR}
+      - PORT_WEB_UI=${LOCALSTACK_ENV_PORT_WEB_UI}
+    volumes:
+      - localstack_volume:${LOCALSTACK_VOLUME}
+
   redis:
     image: redis:7.4.0
     container_name: prompt-api-redis
@@ -8,73 +30,5 @@ services:
     ports:
       - ${REDIS_PORT}:${REDIS_PORT}
 
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.0.1
-    container_name: prompt-api-zookeeper
-    restart: unless-stopped
-    environment:
-      ZOOKEEPER_CLIENT_PORT: ${ZOOKEEPER_CLIENT_PORT}
-      ZOOKEEPER_TICK_TIME: ${ZOOKEEPER_TICK_TIME}
-
-  kafka:
-    image: confluentinc/cp-kafka:7.0.1
-    container_name: prompt-api-kafka
-    restart: unless-stopped
-    ports:
-      - ${KAFKA_PORT}:${KAFKA_PORT}
-    depends_on:
-      - zookeeper
-    environment:
-      # ######## Original start #################
-      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
-      KAFKA_ZOOKEEPER_CONNECT: ${KAFKA_ZOOKEEPER_CONNECT}
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: ${KAFKA_LISTENER_SECURITY_PROTOCOL_MAP}
-      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: ${KAFKA_TRANSACTION_STATE_LOG_MIN_ISR}
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: ${KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR}
-      # ######## Original end ###################
-      #
-#      KAFKA_LISTENERS: LISTENER_1://kafka0:29092,LISTENER_2://localhost:9092
-#      KAFKA_ADVERTISED_LISTENERS: LISTENER_1://kafka0:29092,LISTENER_2://localhost:9092
-#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LISTENER_1:PLAINTEXT,LISTENER_2:PLAINTEXT
-#      KAFKA_INTER_BROKER_LISTENER_NAME: LISTENER_1
-# ###########################################################################################################
-
-#KAFKA_HOST=localhost
-#KAFKA_PORT=9092
-#KAFKA_BROKER_ID=1
-#KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-#KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
-#KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker:29092
-#KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
-#KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
-#KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
-#KAFKA_TOPIC_PROMPT_RESULTS_TO_STORE=prompt_results_to_store
-#KAFKA_CLIENT_ID=prompt-api-client
-
-###########################################################################################################
-
-#  kafka:
-#    image: apache/kafka:3.8.0
-#    hostname: localhost
-#    container_name: prompt-api-kafka
-#    restart: unless-stopped
-#    ports:
-#      - ${KAFKA_PORT}:${KAFKA_PORT}
-#    environment:
-#      KAFKA_BROKER_ID: ${KAFKA_BROKER_ID}
-#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
-#      KAFKA_ADVERTISED_LISTENERS: ${KAFKA_ADVERTISED_LISTENERS}
-#      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: ${KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR}
-#      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-#      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: ${KAFKA_TRANSACTION_STATE_LOG_MIN_ISR}
-#      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: ${KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR}
-#      KAFKA_PROCESS_ROLES: broker,controller
-#      KAFKA_NODE_ID: 1
-#      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:29093
-#      KAFKA_LISTENERS: PLAINTEXT://localhost:29092,CONTROLLER://localhost:29093,PLAINTEXT_HOST://localhost:9092
-#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-#      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-#      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
-#      # CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+volumes:
+  localstack_volume:

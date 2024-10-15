@@ -1,23 +1,23 @@
 import * as crypto from 'node:crypto';
 
-import { Inject, Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
 import { Observable, catchError, firstValueFrom } from 'rxjs';
 import { retry } from 'rxjs/operators';
 import PdfParse = require('pdf-parse'); // eslint-disable-line @typescript-eslint/no-require-imports
-import { Producer, ProducerRecord } from 'kafkajs';
 
 import { CreatePromptResponseDto } from './dto/create-prompt-response.dto';
 import { PromptResponseMappingDto } from './dto/prompt-response-mapping.dto';
 import { CreatePromptDto } from './dto/create-prompt.dto';
+import { SqsService } from '../../lib/sqs/sqs.service';
+import { RedisService } from '../../lib/redis/redis.service';
 
 @Injectable()
 export class PromptService {
   constructor(
-    @Inject('KAFKA_PRODUCER') readonly kafkaProducer: Producer,
-    @Inject('KAFKA_TOPIC') readonly kafkaTopic: string,
-    @Inject('REDIS_CLIENT') readonly redisDataSource: any, // No TS declarations found.
+    readonly redisService: RedisService,
+    readonly sqsService: SqsService,
     readonly httpService: HttpService,
   ) {}
 
@@ -42,21 +42,12 @@ export class PromptService {
       const responseDto: CreatePromptResponseDto = await this.queryApiProtect(prompt.text);
 
       // Notify "prompt-background" service to store a new prompt-result mapping.
-      await this.kafkaProducer.connect();
-      const record: ProducerRecord = {
-        topic: this.kafkaTopic,
-        messages: [
-          {
-            partition: 0,
-            key: `key-${Math.ceil(Math.random() * (10 - 1)) + 1}`,
-            value: JSON.stringify(
-              new PromptResponseMappingDto(promptHash, responseDto, dto.fileName),
-            ),
-          },
-        ],
-      };
+      const mapping = new PromptResponseMappingDto(promptHash, responseDto, dto.fileName);
+      await this.sqsService.sendMessage(
+        process.env.LOCALSTACK_SQS_QUEUE_PROMPT_RESULTS_TO_STORE as string,
+        JSON.stringify(mapping),
+      );
 
-      await this.kafkaProducer.send(record);
       return responseDto;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
     } catch (error) {
@@ -71,15 +62,8 @@ export class PromptService {
   }
 
   async getPromptResponseFromRedis(key: string): Promise<CreatePromptResponseDto | null> {
-    const promptResponse = await this.redisDataSource.get(key);
+    const promptResponse = await this.redisService.get(key);
     return promptResponse ? new CreatePromptResponseDto(JSON.parse(promptResponse)) : null;
-  }
-
-  async setPromptResponseInRedis(
-    promptHash: string,
-    promptResponse: CreatePromptResponseDto,
-  ): Promise<void> {
-    await this.redisDataSource.set(promptHash, JSON.stringify(promptResponse)); // Note, no TTL on purpose.
   }
 
   async queryApiProtect(promptText: string): Promise<CreatePromptResponseDto> {

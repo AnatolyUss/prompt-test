@@ -12,7 +12,6 @@ import {
   teardown,
   consumeLatestMessage,
   arrange,
-  createKafkaTopic,
 } from '../utils/common';
 import { promptApiResponsePassed } from '../fixtures/prompt-api-response';
 import { PromptService } from '../../src/api/prompt/prompt.service';
@@ -20,23 +19,29 @@ import { PromptController } from '../../src/api/prompt/prompt.controller';
 import { CreatePromptResponseDto } from '../../src/api/prompt/dto/create-prompt-response.dto';
 import { PromptResponseMappingDto } from '../../src/api/prompt/dto/prompt-response-mapping.dto';
 import { RedisModule } from '../../src/lib/redis/redis.module';
-import { KafkaModule, getKafkaConsumer } from '../../src/lib/kafka/kafka.module';
+import { SqsModule } from '../../src/lib/sqs/sqs.module';
+import { SqsService } from '../../src/lib/sqs/sqs.service';
+import { RedisService } from '../../src/lib/redis/redis.service';
 
 describe('prompt resource tests', (): void => {
+  const queue = process.env.LOCALSTACK_SQS_QUEUE_PROMPT_RESULTS_TO_STORE as string;
   let prompt: PdfParse.Result;
   let pdfFilePath: string;
+  let nonPdfFilePath: string;
   let app: INestApplication;
   let testServer: Server;
   let promptService: PromptService;
+  let sqsService: SqsService;
+  let redisService: RedisService;
 
   beforeEach(async (): Promise<void> => {
     // Run a real, non mocked http server, in order to check entire http communication cycle.
     [app, testServer] = await Promise.all([initNestApp(), listenToTestExpressApp()]);
     const promptModuleRef: TestingModule = await Test.createTestingModule({
       controllers: [PromptController],
-      providers: [PromptService],
+      providers: [PromptService, SqsService, RedisService],
       imports: [
-        KafkaModule,
+        SqsModule,
         RedisModule,
         HttpModule.register({
           // In milliseconds; default is 0, meaning no timeout.
@@ -46,8 +51,10 @@ describe('prompt resource tests', (): void => {
     }).compile();
 
     promptService = promptModuleRef.get<PromptService>(PromptService);
-    await createKafkaTopic();
-    ({ pdfFilePath, prompt } = await arrange());
+    sqsService = promptModuleRef.get<SqsService>(SqsService);
+    redisService = promptModuleRef.get<RedisService>(RedisService);
+    await sqsService.createQueue(queue);
+    ({ pdfFilePath, nonPdfFilePath, prompt } = await arrange());
   });
 
   afterEach(async (): Promise<void> => {
@@ -86,6 +93,22 @@ describe('prompt resource tests', (): void => {
     });
   });
 
+  it('should not inspect non PDF file', async (): Promise<void> => {
+    // Arrange and Act.
+    const response = await request(app.getHttpServer())
+      .post('/prompt')
+      .attach(process.env.HTML_FILE_FIELD_NAME as string, nonPdfFilePath)
+      .field('fileName', nonPdfFilePath);
+
+    // Assert.
+    expect(response.status).toBe(400);
+    expect(response.body).toStrictEqual({
+      message: 'Validation failed (expected type is application/pdf)',
+      error: 'Bad Request',
+      statusCode: 400,
+    });
+  });
+
   it('should successfully inspect prompt; no prompt-result mapping in Redis', async (): Promise<void> => {
     // Arrange and Act.
     const response = await request(app.getHttpServer())
@@ -101,8 +124,7 @@ describe('prompt resource tests', (): void => {
     expect(response.body).toStrictEqual(promptApiResponsePassed);
     expect(promptResponseFromRedis === null).toBe(true);
 
-    const kafkaConsumer = await getKafkaConsumer();
-    const msg = await consumeLatestMessage(promptService.kafkaTopic, kafkaConsumer);
+    const msg = await consumeLatestMessage(queue);
     expect(msg).toStrictEqual(
       new PromptResponseMappingDto(promptHash, promptApiResponsePassed, pdfFilePath),
     );
@@ -112,7 +134,7 @@ describe('prompt resource tests', (): void => {
     // Arrange.
     const promptHash: string = promptService.getPromptHash(prompt.text);
     const promptResponse = new CreatePromptResponseDto(promptApiResponsePassed);
-    await promptService.setPromptResponseInRedis(promptHash, promptResponse);
+    await redisService.set(promptHash, JSON.stringify(promptResponse));
 
     // Act.
     const response = await request(app.getHttpServer())
@@ -127,8 +149,7 @@ describe('prompt resource tests', (): void => {
     expect(response.body).toStrictEqual(promptApiResponsePassed);
     expect(promptResponseFromRedis).toStrictEqual(promptResponse);
 
-    const kafkaConsumer = await getKafkaConsumer();
-    const msg = await consumeLatestMessage(promptService.kafkaTopic, kafkaConsumer);
+    const msg = await consumeLatestMessage(queue);
     expect(msg === null).toBe(true);
   });
 });
